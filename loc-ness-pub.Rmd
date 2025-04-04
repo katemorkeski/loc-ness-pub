@@ -1,0 +1,474 @@
+---
+title: "loc-ness-pub"
+output: html_document
+---
+
+## Setup
+
+```{r}
+
+library(here)
+#library(lubridate)
+library(dplyr)
+library(stringr)
+#library(tidyr)
+#library(ggplot2)
+library(readxl)
+library(readr)
+library(janitor)
+
+```
+
+## CTD bottle data
+
+-- "a" inside patch, "b" outside patch until we quit -- rename as In and Out or similar
+need flags for bottles
+NaN for missing values
+
+
+```{r}
+
+ctd_bott_recal <- read_xlsx("CTD_bottles_combined_recal.xlsx")
+
+# print column names to confirm accurate conversion
+orig_cols <- colnames(ctd_bott_recal)
+print(orig_cols)
+
+# make friendly column names
+ctd_bott_recal <- clean_names(ctd_bott_recal, replace=janitor:::mu_to_u)
+
+```
+
+
+
+```{r}
+
+# tidy up columns
+
+#expocode nodc code from https://www.ncei.noaa.gov/data/oceans/nodc/codelists/platformlist.txt 
+ctd_bott_recal$EXPOCODE <- as.character("33LQ20230901")
+ctd_bott_recal$Cruise_ID <- as.character("LOC01")
+
+ctd_bott_recal <- ctd_bott_recal |>
+  select(-x1, -date, -time_utc, -sigma_e00, -potemp090c, -time_s, -scan, -rhodamine_fluorescence_discrete, -rhodamine_voltage_discrete, -rwt_voltage_calculated, -rhodfl_tc0) |>
+  relocate(EXPOCODE, .before = station) |>
+  relocate(Cruise_ID, .before = station) |>
+  relocate(datetime_utc, .before = latitude) |>
+  rename(Niskin_ID = bottle) |>
+  rename(rhodamine_ugkg = recal_ppb) |>
+  select(-matches("bottle")) |> 
+  select(-matches("filter")) |>
+  relocate(rhodamine_ugkg, .before = dic_umol_kg) |>
+  mutate(rhodamine_ugkg = round(rhodamine_ugkg, 2)) |>
+  mutate(no3_no2 = case_when(no3_no2 == "0" ~ "0.04", TRUE ~ no3_no2)) |>  # set nitrate values below detection to detection limit
+  mutate(no3_no2 = case_when(no3_no2 == "<0.04" ~ "0.04", TRUE ~ no3_no2)) |>  # set nitrate values below detection to detection limit
+  mutate(po4 = case_when(po4 == "<0.015" ~ "0.015", TRUE ~ po4))      # set phosphate values below detection to detection limit
+
+ctd_bott_recal$no3_no2 <- as.numeric(ctd_bott_recal$no3_no2)
+ctd_bott_recal$po4 <- as.numeric(ctd_bott_recal$po4)
+
+# check nutrient values
+# TODO: look into ammonium higher than nitrate 
+unique(ctd_bott_recal$no3_no2)
+unique(ctd_bott_recal$nh4)
+unique(ctd_bott_recal$po4)
+unique(ctd_bott_recal$tn_umol_l)
+
+#print(ctd_bott_recal$no3_no2)
+
+``` 
+
+## CTD profile data
+
+```{r}
+
+ctd_prof <- read_xlsx("CTD_downcast_upcast_recal.xlsx")
+
+# print column names to confirm accurate conversion
+orig_cols <- colnames(ctd_prof)
+print(orig_cols)
+
+# make friendly column names
+ctd_prof <- clean_names(ctd_prof, replace=janitor:::mu_to_u)
+
+```
+```{r}
+
+# tidy up columns
+ctd_prof$EXPOCODE <- as.character("33LQ20230901")
+ctd_prof$Cruise_ID <- as.character("LOC01")
+
+ctd_prof <- ctd_prof |>
+  select(-x1, -bpos, -start_date, -start_time_utc, -time_s_seconds, -rhodfl_tc0_ppb, -rwt_voltage_calculated) |>
+  relocate(EXPOCODE, .before = station) |>
+  relocate(Cruise_ID, .before = station) |>
+  rename(Latitude = longitude_deg) |>
+  rename(Longitude = longitude_deg_2) |>
+  relocate(datetime_utc, .before = Latitude) |>
+  rename(pH = p_h) |>
+  rename(patch = in_out) |>
+  rename(rhodamine_ugkg = recal_ppb) |>
+  mutate(rhodamine_ugkg = round(rhodamine_ugkg, 2)) 
+
+# convert SBE flag to WOCE
+ctd_prof$sensor_flag <- as.numeric(NA)
+ctd_prof <- ctd_prof |>
+  mutate(sensor_flag = case_when(flag_0_000e_00 == "0.000e+00," ~ 2, flag_0_000e_00 == "-9.99e-29," ~ 4)) 
+unique(ctd_prof$sensor_flag)
+ctd_prof <- ctd_prof |> select(-flag_0_000e_00)
+
+# remove upcasts
+ctd_prof <- filter(ctd_prof, upcast_downcast == 'Downcast')
+ctd_prof <- ctd_prof |> select(-upcast_downcast)
+
+#station2 <- filter(ctd_prof, station == 2)
+
+```
+
+check for differences in station IDs between bottle and profile data and align them
+
+```{r}
+
+# stations <- summarize(ctd_prof, .by = c(station, patch))
+# stations$stn_seq <- 1:nrow(stations)
+# bottle_casts <- summarize(ctd_bott_recal, .by = c(station, cast))
+# profile_casts <- summarize(ctd_prof, .by = c(station, cast, patch))
+
+# check stations
+bottle_stns_lat <- ctd_bott_recal |>
+  group_by(station, cast, event) |>
+  summarize(latitude = mean(latitude, na.rm = TRUE)) 
+bottle_stns_lon <- ctd_bott_recal |>
+  group_by(station, cast, event) |>
+  summarize(longitude = mean(longitude, na.rm = TRUE)) 
+bottle_stns <- cbind(bottle_stns_lat, bottle_stns_lon$longitude)
+bottle_stns <- bottle_stns |> 
+  rename(stn_alph = station) |>
+  rename(cast_btl = cast) |>
+  rename(latitude_btl = latitude) |>
+  rename(longitude_btl = "...5") 
+  
+# set up to construct lookup table
+bottle_stns <- ungroup(bottle_stns)
+bottle_stns <- bottle_stns |>   
+  add_row(event = c(26, 27, 28, 29,33,36,37))
+  
+# check coordinates of stations
+profile_stns_lat <- ctd_prof |>
+  group_by(station, cast, patch) |>
+  summarize(Latitude = mean(Latitude, na.rm = TRUE)) 
+profile_stns_lon <- ctd_prof |>
+  group_by(station, cast, patch) |>
+  summarize(Longitude = mean(Longitude, na.rm = TRUE)) 
+profile_stns <- cbind(profile_stns_lat, profile_stns_lon$Longitude)
+profile_stns <- profile_stns |> 
+  rename(stn_no = station) |>
+  rename(cast_prof = cast) |>
+  rename(latitude_prof = Latitude) |>
+  rename(longitude_prof = "...5") |>
+  arrange(stn_no, patch)
+
+# make lookup table
+station_lookup <- cbind(profile_stns, bottle_stns)
+#station_lookup$lat_diff <- station_lookup$latitude_prof - station_lookup$latitude_btl
+#station_lookup$lon_diff <- station_lookup$longitude_prof - station_lookup$longitude_btl
+station_lookup$Profile_ID <- (station_lookup$event*1000000 + station_lookup$stn_no*10000 + station_lookup$cast_prof*100)
+station_lookup$Profile_ID <- str_pad(station_lookup$Profile_ID, 8, pad = "0")
+station_lookup_bottle <- station_lookup |> select(stn_no, patch, event, Profile_ID)
+
+# combine lookup table station, patch, and Profile_ID with bottle data
+ctd_bott_recal <- left_join(ctd_bott_recal, station_lookup_bottle, by = join_by(event))  
+ctd_bott_recal$Profile_ID <- as.numeric(ctd_bott_recal$Profile_ID)
+ctd_bott_recal$Sample_ID <- ctd_bott_recal$Profile_ID + ctd_bott_recal$Niskin_ID
+setdiff(ctd_bott_recal$cast, ctd_bott_recal$cast_prof) #check for differences between cast columns from bottle and profile sets
+setdiff(ctd_bott_recal$station, ctd_bott_recal$stn_no) # check for expected differences between station columns
+
+```
+
+```{r}
+# tidy files for csv
+
+ctd_bott_recal <- ctd_bott_recal |>
+  relocate(stn_no, .before = station) |>
+  relocate(patch, .before = station) |>
+  relocate(Sample_ID, .before = datetime_utc) |>
+  select(-cast_prof, -Profile_ID)
+
+# convert oxygen units
+
+ctd_bott_recal$density <- (999.842594 + 0.06793952*ctd_bott_recal$t090c - 0.00909529*ctd_bott_recal$t090c^2 + 0.0001001685*ctd_bott_recal$t090c^3 -0.000001120083*ctd_bott_recal$t090c^4 +
+0.000000006536332*ctd_bott_recal$t090c^5 + (0.824493-0.0040899*ctd_bott_recal$t090c + 0.000076438*ctd_bott_recal$t090c^2 - 0.00000082467*ctd_bott_recal$t090c^3 +
+0.0000000053875*ctd_bott_recal$t090c^4)*ctd_bott_recal$sal00 + (-0.00572466 + 0.00010227*ctd_bott_recal$t090c - 0.0000016546*ctd_bott_recal$t090c^2)*ctd_bott_recal$sal00^1.5 +
+0.00048314*ctd_bott_recal$sal00^2)/1000
+
+# convert per-liter quantities to per kg
+#oxygen
+ctd_bott_recal$Oxygen_umol_kg <- ctd_bott_recal$sbeox0mm_l/ctd_bott_recal$density
+ctd_bott_recal$Oxygen_umol_kg <- round(ctd_bott_recal$Oxygen_umol_kg, 2)
+# nutrients
+ctd_bott_recal$no3_no2_umol_kg <- ctd_bott_recal$no3_no2/ctd_bott_recal$density
+ctd_bott_recal$no3_no2_umol_kg <- round(ctd_bott_recal$no3_no2_umol_kg, 2)
+
+ctd_bott_recal$nh4_umol_kg <- ctd_bott_recal$nh4/ctd_bott_recal$density
+ctd_bott_recal$nh4_umol_kg <- round(ctd_bott_recal$nh4_umol_kg, 2)
+
+ctd_bott_recal$po4_umol_kg <- ctd_bott_recal$po4/ctd_bott_recal$density
+ctd_bott_recal$po4_umol_kg <- round(ctd_bott_recal$po4_umol_kg, 2)
+
+ctd_bott_recal$silicate_umol_kg <- ctd_bott_recal$silicate/ctd_bott_recal$density
+ctd_bott_recal$silicate_umol_kg <- round(ctd_bott_recal$silicate_umol_kg, 2)
+# PIC
+ctd_bott_recal$PIC_umol_kg <- ctd_bott_recal$pic_umol_l/ctd_bott_recal$density
+ctd_bott_recal$PIC_umol_kg <- round(ctd_bott_recal$PIC_umol_kg, 2)
+# POC
+ctd_bott_recal$POC_umol_kg <- ctd_bott_recal$poc_umol_l/ctd_bott_recal$density
+ctd_bott_recal$POC_umol_kg <- round(ctd_bott_recal$POC_umol_kg, 2)
+# TPN
+ctd_bott_recal$TPN_umol_kg <- ctd_bott_recal$tn_umol_l/ctd_bott_recal$density
+ctd_bott_recal$TPN_umol_kg <- round(ctd_bott_recal$TPN_umol_kg, 2)
+#remove umol/L columns
+ctd_bott_recal <- ctd_bott_recal |>
+  select(-sbeox0mm_l, -no3_no2, -nh4, -po4, -silicate, -pic_umol_l, -poc_umol_l, -tn_umol_l)
+
+# format headers for OCADS
+ctd_bott_recal <- ctd_bott_recal |>
+  rename(Station_ID = stn_no) |>
+  rename(Patch = patch) |>
+  select(-station) |>
+  rename(Cast_number = cast) |>
+  rename(Event_number = event) |>
+  rename(Rosette_position = Niskin_ID) |>
+  rename(Datetime_UTC = datetime_utc) |>
+  rename(Latitude = latitude) |>
+  mutate(Latitude = round(Latitude, 4)) |>
+  rename(Longitude = longitude) |>
+  mutate(Longitude = round(Longitude, 4)) |>
+  relocate(pr_dm, .after = Longitude) |>
+  rename(CTDPRES = pr_dm) |>
+  rename(CTDTEMP_ITS90 = t090c) |>
+  rename(Depth = dep_sm) |>
+  rename(CTDSAL_PSS78 = sal00) |>
+  relocate(Oxygen_umol_kg, .after = CTDSAL_PSS78) |>
+  rename(CTDOXY = Oxygen_umol_kg) |>
+  select(-density) |>  
+  rename(Chl_a_sensor = wet_star) |>
+  rename(pH_T_measured_electrode = ph) |>
+  select(-c0s_m) |>
+  rename(DIC = dic_umol_kg) |>
+  rename(TA = ta_umol_kg) |>
+  relocate(pH_T_measured_electrode, .after = CTDOXY) |>
+  relocate(Chl_a_sensor, .after = pH_T_measured_electrode) |>
+  rename(Rhodamine = rhodamine_ugkg) |>
+  relocate(Rhodamine, .after = Chl_a_sensor) |>
+  relocate(DIC, .after = Rhodamine) |>
+  relocate(TA, .after = DIC) |>  
+  rename(Silicate = silicate_umol_kg) |>
+  relocate(Silicate, .after = TA) |>
+  rename(Phosphate = po4_umol_kg) |>
+  relocate(Phosphate, .after = Silicate) |>
+  rename(Ammonium = nh4_umol_kg) |>
+  rename(Nitrate_and_Nitrite = no3_no2_umol_kg) |>  
+  relocate(Nitrate_and_Nitrite, .after = Phosphate) |>
+  relocate(Ammonium, .after = Nitrate_and_Nitrite) |>
+  rename(Delta_C13_DIC = d13c) |>
+  rename(Delta_C13_POC = d13poc) |>
+  rename(Delta_N15_TPN = d15n_air) |>
+  rename(Atom_Percent_15N_TPN = x15n_at) |>
+  rename(Particulate_Inorganic_Carbon = PIC_umol_kg) |>
+  rename(Particulate_Organic_Carbon =POC_umol_kg) |>
+  rename(Total_Particulate_Nitrogen = TPN_umol_kg) |>
+  relocate(Particulate_Inorganic_Carbon, .after = Ammonium) |>
+  relocate(Particulate_Organic_Carbon, .after = Particulate_Inorganic_Carbon) |>
+  relocate(Total_Particulate_Nitrogen, .after = Particulate_Organic_Carbon)
+
+# check for any missing sensor values
+sum(is.na(ctd_bott_recal$Rosette_position))  
+sum(is.na(ctd_bott_recal$CTDTEMP_ITS90)) 
+sum(is.na(ctd_bott_recal$CTDSAL_PSS78)) 
+sum(is.na(ctd_bott_recal$CTDOXY)) 
+sum(is.na(ctd_bott_recal$pH_T_measured_electrode)) 
+sum(is.na(ctd_bott_recal$Chl_a_sensor)) 
+sum(is.na(ctd_bott_recal$Rhodamine)) 
+
+# initialize flag columns for sensors 
+ctd_bott_recal$Niskin_flag <- as.numeric(2)
+ctd_bott_recal$CTDTEMP_flag <- as.numeric(2)
+ctd_bott_recal$CTDSAL_flag <- as.numeric(2)
+ctd_bott_recal$CTDOXY_flag <- as.numeric(2)
+ctd_bott_recal$pH_flag <- as.numeric(2)
+ctd_bott_recal$Chl_a_flag <- as.numeric(2)
+ctd_bott_recal$Rhodamine <- as.numeric(2)
+
+# initialize flag columns for discrete measurements
+ctd_bott_recal$DIC_flag <- as.numeric(NA)
+ctd_bott_recal$TA_flag <- as.numeric(NA)
+ctd_bott_recal$Silicate_flag <- as.numeric(NA)
+ctd_bott_recal$Phosphate_flag <- as.numeric(NA)
+ctd_bott_recal$Nitrate_and_Nitrite_flag <- as.numeric(NA)
+ctd_bott_recal$Ammonium_flag <- as.numeric(NA)
+ctd_bott_recal$PIC_flag <- as.numeric(NA)
+ctd_bott_recal$POC_flag <- as.numeric(NA)
+ctd_bott_recal$TPN_flag <- as.numeric(NA)
+ctd_bott_recal$Delta_C13_DIC_flag <- as.numeric(NA)
+ctd_bott_recal$Delta_C13_POC_flag <- as.numeric(NA)
+ctd_bott_recal$Atom_Percent_15N_TPN_flag<- as.numeric(NA)
+ctd_bott_recal$Delta_N15_TPN_flag <- as.numeric(NA)
+
+# set flag values
+ctd_bott_recal <- ctd_bott_recal |>
+mutate(DIC_flag= case_when(DIC != "NA" ~ 2, is.na(DIC) ~9)) |>
+mutate(TA_flag= case_when(TA != "NA" ~ 2, is.na(TA) ~9)) |>
+mutate(Silicate_flag= case_when(Silicate != "NA" ~ 2, is.na(Silicate) ~9)) |>
+mutate(Phosphate_flag= case_when(Phosphate != "NA" ~ 2, is.na(Phosphate) ~9)) |>
+mutate(Nitrate_and_Nitrite_flag= case_when(Nitrate_and_Nitrite != "NA" ~ 2, is.na(Nitrate_and_Nitrite) ~9)) |>
+mutate(Ammonium_flag= case_when(Ammonium != "NA" ~ 2, is.na(Ammonium) ~9)) |>
+mutate(PIC_flag = case_when(Particulate_Inorganic_Carbon != "NA" ~ 2, is.na(Particulate_Inorganic_Carbon) ~9)) |>
+mutate(POC_flag = case_when(Particulate_Organic_Carbon != "NA" ~ 2, is.na(Particulate_Organic_Carbon) ~9)) |>
+mutate(TPN_flag = case_when(Total_Particulate_Nitrogen != "NA" ~ 2, is.na(Total_Particulate_Nitrogen) ~9)) |>
+mutate(Delta_C13_DIC_flag = case_when(Delta_C13_DIC != "NA" ~ 2, is.na(Delta_C13_DIC) ~9)) |>
+mutate(Delta_C13_POC_flag = case_when(Delta_C13_POC != "NA" ~ 2, is.na(Delta_C13_POC) ~9)) |>
+mutate(Atom_Percent_15N_TPN_flag = case_when(Atom_Percent_15N_TPN != "NA" ~ 2, is.na(Atom_Percent_15N_TPN) ~9)) |>
+mutate(Delta_N15_TPN_flag = case_when(Delta_N15_TPN != "NA" ~ 2, is.na(Delta_N15_TPN) ~9))
+
+# print column names to facilitate re-ordering
+# # very ugly way of getting and editing headers to re-order
+# headers <- names(ctd_bott_recal)
+# headers <- cat(bott_cols,"\n",sep=", ")
+# 
+# str_replace(headers, ", ", "', '")
+# print(headers) # copy and paste below
+# 
+# headers <- c("EXPOCODE, Cruise_ID, Station_ID, Patch, Cast_number, Event_number, Rosette_position, Niskin_flag, Sample_ID, Datetime_UTC, Latitude, Longitude, CTDPRES, CTDTEMP_ITS90, CTDTEMP_flag, Depth, CTDSAL_PSS78, CTDSAL_flag, CTDOXY, CTDOXY_flag, pH_T_measured_electrode, pH_flag, Chl_a_sensor, Chl_a_flag, Rhodamine, DIC, DIC_flag, TA, TA_flag, Silicate, Silicate_flag, Phosphate, Phosphate_flag, Nitrate_and_Nitrite, Nitrate_and_Nitrite_flag, Ammonium, Ammonium_flag, Particulate_Inorganic_Carbon, PIC_flag, Particulate_Organic_Carbon, POC_flag, Total_Particulate_Nitrogen, TPN_flag,  Delta_C13_DIC, Delta_C13_DIC_flag, Delta_C13_POC, Delta_C13_POC_flag, Atom_Percent_15N_TPN, Atom_Percent_15N_TPN_flag, Delta_N15_TPN, Delta_N15_TPN_flag") 
+# 
+# headers2 <- str_replace_all(headers, ", ", "', '")
+# headers2 <- str_replace_all(headers2, '"', "'")
+# headers2 <- c(headers2)
+# print(headers2) # copy and paste below
+
+headers3 <- c('EXPOCODE', 'Cruise_ID', 'Station_ID', 'Patch', 'Cast_number', 'Event_number', 'Rosette_position', 'Niskin_flag', 'Sample_ID', 'Datetime_UTC', 'Latitude', 'Longitude', 'CTDPRES', 'CTDTEMP_ITS90', 'CTDTEMP_flag', 'Depth', 'CTDSAL_PSS78', 'CTDSAL_flag', 'CTDOXY', 'CTDOXY_flag', 'pH_T_measured_electrode', 'pH_flag', 'Chl_a_sensor', 'Chl_a_flag', 'Rhodamine', 'DIC', 'DIC_flag', 'TA', 'TA_flag', 'Silicate', 'Silicate_flag', 'Phosphate', 'Phosphate_flag', 'Nitrate_and_Nitrite', 'Nitrate_and_Nitrite_flag', 'Ammonium', 'Ammonium_flag', 'Particulate_Inorganic_Carbon', 'PIC_flag', 'Particulate_Organic_Carbon', 'POC_flag', 'Total_Particulate_Nitrogen', 'TPN_flag', 'Delta_C13_DIC', 'Delta_C13_DIC_flag', 'Delta_C13_POC', 'Delta_C13_POC_flag', 'Atom_Percent_15N_TPN', 'Atom_Percent_15N_TPN_flag', 'Delta_N15_TPN', 'Delta_N15_TPN_flag')
+
+ctd_bott_recal <- ctd_bott_recal[, headers3]
+  
+# TODO: tidy profile file
+# TODO: add flags!
+  
+```
+
+
+```{r}
+# write bottle and profile data for publication
+
+write.csv(ctd_bott_recal, here('output', 'LOC-01_CTD_bottle.csv'), na = "NaN", row.names=FALSE)
+write.csv(ctd_prof, here('output','LOC-01_CTD_profiles.csv'), na = "NaN", row.names=FALSE)
+```
+
+
+
+## Underway
+
+```{r}
+
+# use read.csv because read_csv turns TA columns logical and empty
+underway <- read.csv("LOC-01_Underway_continuous_recal.csv")
+underway$datetime_UTC <- as.POSIXct(underway$datetime_UTC)
+
+```
+
+
+```{r}
+
+# tidy up columns
+underway$EXPOCODE <- as.character("33LQ20230901")
+underway$Cruise_ID <- as.character("LOC01")
+
+underway <- underway |>
+  select(-X, -DateTime_UTC, -location_data_flag, -Dye_ppb, -mv, -Location_File, -timestamp, -c1) |>
+  relocate(EXPOCODE, .before = Latitude) |>
+  relocate(Cruise_ID, .before = Latitude) |>
+  relocate(datetime_UTC, .before = Latitude) 
+
+```
+
+```{r}
+
+# review CO2 flags
+
+hist(underway$fCO2_SW_SST_uatm)
+hist(underway$WOCE_QC_FLAG)
+
+co2flags <- filter(underway, WOCE_QC_FLAG != "NA")
+co2flag3 <- filter(underway, WOCE_QC_FLAG == 3)
+# one point was flagged 3 for low water flow. remove the CO2 values since underway pump was off
+underway <- underway |>
+  mutate(fCO2_SW_SST_uatm = case_when(WOCE_QC_FLAG == 3 ~ NA, TRUE ~ fCO2_SW_SST_uatm)) |>
+  mutate(fCO2_ATM_interpolated_uatm = case_when(WOCE_QC_FLAG == 3 ~ NA, TRUE ~ fCO2_ATM_interpolated_uatm)) |>
+  mutate(dfCO2_uatm = case_when(WOCE_QC_FLAG == 3 ~ NA, TRUE ~ dfCO2_uatm)) |>
+  mutate(WOCE_QC_FLAG = case_when(WOCE_QC_FLAG == 3 ~ NA, TRUE ~ WOCE_QC_FLAG)) |>
+  rename(TempC_SBE45_lab = Temp1_C) |>
+  rename(TempC_SBE38_hull = Temp2_C) |>
+  #rename(cond_SBE45 = c1) |>
+  rename(Salinity_PSU_SBE45 = Salinity_PSU) |> 
+  rename(TA_umol_kg = Corrected_TA_umol_kg_) |>
+  rename(TA_flag = Data_Flag) |>
+  rename(fCO2_flag = WOCE_QC_FLAG) |>
+  rename(rhodamine_ppb = recal_ppb) |>
+  rename(fCO2_water_SST = fCO2_SW_SST_uatm) |>
+  rename(fCO2_atm_interp = fCO2_ATM_interpolated_uatm) 
+
+hist(underway$TA_umol_kg)
+hist(underway$TA_flag)
+
+#TAflags <- filter(underway, Data_Flag != "NA")
+unique(underway$TA_flag)
+
+# headers: (EXPOCODE, Cruise_ID, datetime_UTC, Latitude, Longitude, Depth, SST_ITS90, SSS_PSS78, Pressure_ATM, Temperature_EQU_ITS90, Pressure_EQU, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated, fCO2_SW_SST, fCO2_SW_flag, fCO2_ATM_interpolated, dfCO2, TA, TA_flag, rhodamine, rhodamime_flag)
+
+# units: (NA, NA, [yyyy-mm-dd hh:mm:ss], decimal degree, decimal degree, meter, degree Celsius, NA, hPa, degree Celsius, hPa, micromol/mol, micromol/mol, micromol/mol, microatm, NA, microatm, microatm, micromol/kg, NA, microg/kg, NA)
+
+write.csv(underway, here('output','LOC-01_underway.csv'), row.names=FALSE)
+
+```
+## Drifters
+
+```{r}
+
+# TODO: get drifters 1 and 2
+
+drifter3 <- read.csv("LOC-01_Drifter_03_recalibrated.csv")
+drifter3$datetime_UTC <- as.POSIXct(drifter3$datetime_UTC)
+drifter3$EXPOCODE <- as.character("33LQ20230901")
+drifter3$cruise_ID <- as.character("LOC01")
+
+# check number of deployments
+unique(drifter3$Deployment)
+
+drifter3 <- drifter3 |>
+  select(-X, -Fluorometer.Time, -Bat.Volts, -Sensor.Ppb, -Gain) 
+
+drifter3 <- drifter3 |>
+  rename(Latitude = Lattitude) |>
+  relocate(EXPOCODE, .before = Latitude) |>
+  relocate(cruise_ID, .before = Latitude) |>
+  relocate(datetime_UTC, .before = Latitude) |>
+  rename(Depth_AquaTROLL = Depth.m)
+
+
+```
+
+```{r}
+
+drifter4 <- read.csv("LOC-01_Drifter_04_recalibrated.csv")
+drifter4$datetime_UTC <- as.POSIXct(drifter4$datetime_UTC)
+drifter4$EXPOCODE <- as.character("33LQ20230901")
+drifter4$cruise_ID <- as.character("LOC01")
+
+# check number of deployments
+unique(drifter4$Deployment)
+
+
+
+```
+
+
+
+
