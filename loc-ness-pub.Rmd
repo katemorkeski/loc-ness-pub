@@ -12,10 +12,11 @@ library(here)
 library(dplyr)
 library(stringr)
 #library(tidyr)
-#library(ggplot2)
+library(ggplot2)
 library(readxl)
 library(readr)
 library(janitor)
+library(naniar)
 
 ```
 
@@ -436,8 +437,56 @@ write.csv(ctd_prof, here('output','LOC-01_CTD_profiles.csv'), na = "NaN", row.na
 ```{r}
 
 # use read.csv because read_csv turns TA columns logical and empty
-underway <- read.csv("LOC-01_Underway_continuous_recal.csv")
-underway$datetime_UTC <- as.POSIXct(underway$datetime_UTC)
+underway_rho <- read.csv("LOC-01_Underway_continuous_recal.csv")
+underway_rho$datetime_UTC <- as.POSIXct(underway_rho$datetime_UTC)
+
+```
+
+```{r}
+
+ggplot(underway_rho, aes(x = datetime_UTC, y = Salinity_PSU)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+
+ggplot(underway_rho, aes(x = datetime_UTC, y = Temp2_C)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+
+ggplot(underway_rho, aes(x = datetime_UTC, y = dfCO2_uatm)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+#ggsave("fCO2-time-all-pts.png")
+
+# remove lines when underway system was not on (before 9/2/2023  2:44:52 AM, after 9/04 09:00:26)
+underway_rho <- underway_rho |> filter(timestamp > 1693622692)
+underway_rho <- underway_rho |> filter(timestamp < 1693818026)
+
+ggplot(underway_rho, aes(x = datetime_UTC, y = Salinity_PSU)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+
+ggplot(underway_rho, aes(x = datetime_UTC, y = Temp2_C)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+
+ggplot(underway_rho, aes(x = datetime_UTC, y = dfCO2_uatm)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+
+underway_rho <- underway_rho |>
+  mutate(Salinity_PSU = case_when(Salinity_PSU < 29 ~ NA, TRUE ~ Salinity_PSU)) 
+
+ggplot(underway_rho, aes(x = datetime_UTC, y = Salinity_PSU)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+
 
 ```
 
@@ -445,61 +494,80 @@ underway$datetime_UTC <- as.POSIXct(underway$datetime_UTC)
 ```{r}
 
 # tidy up columns
-underway$EXPOCODE <- as.character("33LQ20230901")
-underway$Cruise_ID <- as.character("LOC01")
+underway_rho$EXPOCODE <- as.character("33LQ20230901")
+underway_rho$Cruise_ID <- as.character("LOC01")
 
-underway <- underway |>
+# add flags
+underway_rho$Rhodamine_flag <- as.numeric(2)  
+underway_rho$TempC_SBE45_flag <- as.numeric(2)  
+underway_rho$TempC_SBE38_flag <- as.numeric(2)  
+underway_rho$Salinity_flag <- as.numeric(2)  
+
+# sort out columns # adjust salinity flag & rhodamine flag
+underway_rho <- underway_rho |>
   select(-X, -DateTime_UTC, -location_data_flag, -Dye_ppb, -mv, -Location_File, -timestamp, -c1) |>
   relocate(EXPOCODE, .before = Latitude) |>
   relocate(Cruise_ID, .before = Latitude) |>
-  relocate(datetime_UTC, .before = Latitude) 
+  relocate(datetime_UTC, .before = Latitude) |>
+  rename(Datetime_UTC = datetime_UTC) |>
+  rename(TempC_SBE45_lab = Temp1_C) |>
+  rename(TempC_SBE38_hull = Temp2_C) |>
+  rename(Salinity_PSU_SBE45 = Salinity_PSU) |> 
+  rename(TA_umol_kg = Corrected_TA_umol_kg_) |>
+  rename(TA_flag = Data_Flag) |>
+  rename(Rhodamine_ugkg = recal_ppb) |>
+  mutate(Salinity_flag = case_when(is.na(Salinity_PSU_SBE45) ~ 4, TRUE ~ Salinity_flag)) |>
+  mutate(Rhodamine_flag = case_when(is.na(Rhodamine_ugkg) ~ 9, TRUE ~ Rhodamine_flag)) |>
+  mutate(TA_flag = case_when(is.na(TA_umol_kg) ~ 9, TRUE ~ TA_flag)) |>
+  relocate(TempC_SBE45_flag, .after = TempC_SBE45_lab) |>
+  relocate(TempC_SBE38_flag, .after = TempC_SBE38_hull) |>
+  relocate(Salinity_flag, .after = Salinity_PSU_SBE45)
+
+# round columns
+underway_rho <- underway_rho |>
+  mutate(Latitude = round(Latitude, 4)) |>
+  mutate(Longitude = round(Longitude, 4)) |>
+  mutate(TempC_SBE45_lab = round(TempC_SBE45_lab, 3)) |>
+  mutate(TempC_SBE38_hull = round(TempC_SBE38_hull, 3)) |>
+  mutate(Salinity_PSU_SBE45 = round(Salinity_PSU_SBE45, 3)) |>
+  mutate(Rhodamine_ugkg = round(Rhodamine_ugkg, 2)) 
+
+```
+
+# read in full CO2 data set
+
+```{r}
+
+underway_co2 <- read.csv('LOC-01_Final_CO2.csv', skip = 4)
+# one point was flagged 3 for low water flow. remove this row since underway pump was off
+underway_co2 <- filter(underway_co2, YD_UTC < 247.375)
+underway_co2 <- replace_with_na_all(data = underway_co2,
+                    condition = ~.x == -999)
+#colnames(underway_co2) <- gsub("@", "_at_", colnames(underway_co2))
+
+
+ggplot(underway_co2, aes(x = YD_UTC, y = dfCO2_uatm)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+ggsave("fCO2-time-all-pts.png")
 
 ```
 
 ```{r}
 
-# review CO2 flags
+# TODO: merge underway_rho and underway_co2 to include all CO2 points
+# keep columns we left out that SOCAT wants: Pressure_ATM, Pressure_EQU, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated 
+# confirm column headers to match SOCAT formats
 
-hist(underway$fCO2_SW_SST_uatm)
-hist(underway$WOCE_QC_FLAG)
-
-co2flags <- filter(underway, WOCE_QC_FLAG != "NA")
-co2flag3 <- filter(underway, WOCE_QC_FLAG == 3)
-# one point was flagged 3 for low water flow. remove the CO2 values since underway pump was off
-underway <- underway |>
-  mutate(fCO2_SW_SST_uatm = case_when(WOCE_QC_FLAG == 3 ~ NA, TRUE ~ fCO2_SW_SST_uatm)) |>
-  mutate(fCO2_ATM_interpolated_uatm = case_when(WOCE_QC_FLAG == 3 ~ NA, TRUE ~ fCO2_ATM_interpolated_uatm)) |>
-  mutate(dfCO2_uatm = case_when(WOCE_QC_FLAG == 3 ~ NA, TRUE ~ dfCO2_uatm)) |>
-  mutate(WOCE_QC_FLAG = case_when(WOCE_QC_FLAG == 3 ~ NA, TRUE ~ WOCE_QC_FLAG)) |>
-  rename(TempC_SBE45_lab = Temp1_C) |>
-  rename(TempC_SBE38_hull = Temp2_C) |>
-  #rename(cond_SBE45 = c1) |>
-  rename(Salinity_PSU_SBE45 = Salinity_PSU) |> 
-  rename(TA_umol_kg = Corrected_TA_umol_kg_) |>
-  rename(TA_flag = Data_Flag) |>
-  rename(fCO2_flag = WOCE_QC_FLAG) |>
-  rename(rhodamine_ppb = recal_ppb) |>
-  rename(fCO2_water_SST = fCO2_SW_SST_uatm) |>
-  rename(fCO2_atm_interp = fCO2_ATM_interpolated_uatm) 
-
-hist(underway$TA_umol_kg)
-hist(underway$TA_flag)
-
-#TAflags <- filter(underway, Data_Flag != "NA")
-unique(underway$TA_flag)
 
 # headers we should have:
 # headers: (EXPOCODE, Cruise_ID, datetime_UTC, Latitude, Longitude, Depth, SST_ITS90, SSS_PSS78, Pressure_ATM, Temperature_EQU_ITS90, Pressure_EQU, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated, fCO2_SW_SST, fCO2_SW_flag, fCO2_ATM_interpolated, dfCO2, TA, TA_flag, rhodamine, rhodamime_flag)
 
 # units: (NA, NA, [yyyy-mm-dd hh:mm:ss], decimal degree, decimal degree, meter, degree Celsius, NA, hPa, degree Celsius, hPa, micromol/mol, micromol/mol, micromol/mol, microatm, NA, microatm, microatm, micromol/kg, NA, microg/kg, NA)
 
-
-# TODO: remove lines when underway system was not on (before 9/2/2023  1:50:00 AM, after 9/04 09:01 row 165841)
-# TODO: Add columns we left out that SOCAT wants: Pressure_ATM, Pressure_EQU, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated (confirm timestamps)
-# TODO: edit column headers to match SOCAT formats
-
 writeLines(c("# Expocode: 33LQ20230901", "# Vessel name: Connecticut", "# PIs: Subhas, A. V.", "# Org: Woods Hole Oceanographic Institution", "# Vessel type: Ship", "# Suggested QC: B", "EXPOCODE, Cruise_ID, datetime_UTC, Latitude, Longitude, Depth, SST_ITS90, SSS_PSS78, Pressure_ATM, Temperature_EQU_ITS90, Pressure_EQU, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated, fCO2_SW_SST, fCO2_SW_flag, fCO2_ATM_interpolated, dfCO2, TA, TA_flag, rhodamine, rhodamime_flag", "NA, NA, [yyyy-mm-dd hh:mm:ss], decimal degree, decimal degree, meter, degree Celsius, NA, hPa, degree Celsius, hPa, micromol/mol, micromol/mol, micromol/mol, microatm, NA, microatm, microatm, micromol/kg, NA, microg/kg, NA"), here('output','LOC-01_underway.txt'))
-write.table(underway, here('output','LOC-01_underway.txt'), col.names = FALSE, row.names=FALSE, append=TRUE)
+write.table(underway_rho, here('output','LOC-01_underway.txt'), col.names = FALSE, row.names=FALSE, append=TRUE)
 
 #write.csv(underway, here('output','LOC-01_underway.csv'), row.names=FALSE)
 
