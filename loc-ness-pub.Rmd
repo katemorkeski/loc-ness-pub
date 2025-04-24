@@ -8,7 +8,7 @@ output: html_document
 ```{r}
 
 library(here)
-#library(lubridate)
+library(lubridate)
 library(dplyr)
 library(stringr)
 #library(tidyr)
@@ -543,33 +543,169 @@ underway_co2 <- read.csv('LOC-01_Final_CO2.csv', skip = 4)
 underway_co2 <- filter(underway_co2, YD_UTC < 247.375)
 underway_co2 <- replace_with_na_all(data = underway_co2,
                     condition = ~.x == -999)
-#colnames(underway_co2) <- gsub("@", "_at_", colnames(underway_co2))
-
 
 ggplot(underway_co2, aes(x = YD_UTC, y = dfCO2_uatm)) +
   geom_line() +
   geom_point() +
   theme_minimal()
-ggsave("fCO2-time-all-pts.png")
+#ggsave("dfCO2-time-all-pts.png")
 
 ```
 
 ```{r}
 
-# TODO: merge underway_rho and underway_co2 to include all CO2 points
+# merge underway_rho and underway_co2 to include all CO2 points
 # keep columns we left out that SOCAT wants: Pressure_ATM, Pressure_EQU, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated 
-# confirm column headers to match SOCAT formats
+# format column headers for match SOCAT
+ 
+# underway_co2$datetime <- paste(underway_co2$datetime, underway_co2$time)
+#underway_co2$datetime <-paste(underway_co2$DATE_UTC__ddmmyyyy, underway_co2$TIME_UTC_hh.mm.ss)
+underway_co2$DATE_UTC__ddmmyyyy <- str_pad(underway_co2$DATE_UTC__ddmmyyyy, 8, pad = "0")
+underway_co2$date <- dmy(underway_co2$DATE_UTC__ddmmyyyy)
+underway_co2$datetime <- paste(underway_co2$date, underway_co2$TIME_UTC_hh.mm.ss)
+underway_co2$datetime <- as.POSIXct(underway_co2$datetime, tz = "UTC", format = "%Y-%m-%d %H:%M:%S")
+underway_co2$two_sec <-round_date(underway_co2$datetime, "2s")
 
+# confirm no duplicates
+duplicates <- duplicated(underway_co2$two_sec)
+unique(duplicates)
 
-# headers we should have:
-# headers: (EXPOCODE, Cruise_ID, datetime_UTC, Latitude, Longitude, Depth, SST_ITS90, SSS_PSS78, Pressure_ATM, Temperature_EQU_ITS90, Pressure_EQU, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated, fCO2_SW_SST, fCO2_SW_flag, fCO2_ATM_interpolated, dfCO2, TA, TA_flag, rhodamine, rhodamime_flag)
+ggplot(underway_co2, aes(x = two_sec, y = dfCO2_uatm)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
 
-# units: (NA, NA, [yyyy-mm-dd hh:mm:ss], decimal degree, decimal degree, meter, degree Celsius, NA, hPa, degree Celsius, hPa, micromol/mol, micromol/mol, micromol/mol, microatm, NA, microatm, microatm, micromol/kg, NA, microg/kg, NA)
+underway_co2$Datetime_char <- as.character(underway_co2$two_sec)
+underway_rho$Datetime_char <- as.character(underway_rho$Datetime_UTC)
 
-writeLines(c("# Expocode: 33LQ20230901", "# Vessel name: Connecticut", "# PIs: Subhas, A. V.", "# Org: Woods Hole Oceanographic Institution", "# Vessel type: Ship", "# Suggested QC: B", "EXPOCODE, Cruise_ID, datetime_UTC, Latitude, Longitude, Depth, SST_ITS90, SSS_PSS78, Pressure_ATM, Temperature_EQU_ITS90, Pressure_EQU, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated, fCO2_SW_SST, fCO2_SW_flag, fCO2_ATM_interpolated, dfCO2, TA, TA_flag, rhodamine, rhodamime_flag", "NA, NA, [yyyy-mm-dd hh:mm:ss], decimal degree, decimal degree, meter, degree Celsius, NA, hPa, degree Celsius, hPa, micromol/mol, micromol/mol, micromol/mol, microatm, NA, microatm, microatm, micromol/kg, NA, microg/kg, NA"), here('output','LOC-01_underway.txt'))
-write.table(underway_rho, here('output','LOC-01_underway.txt'), col.names = FALSE, row.names=FALSE, append=TRUE)
+underway_co2 <- underway_co2 |> select(-Group, -YD_UTC, -DATE_UTC__ddmmyyyy, -TIME_UTC_hh.mm.ss, -date, -datetime, two_sec)
+underway_rho <- underway_rho |> select(-fCO2_SW_SST_uatm, -fCO2_ATM_interpolated_uatm, -WOCE_QC_FLAG)
 
-#write.csv(underway, here('output','LOC-01_underway.csv'), row.names=FALSE)
+underway <-left_join(underway_rho, underway_co2, by = join_by(Datetime_char))  
+
+```
+
+# plot
+
+```{r}
+
+ggplot(underway, aes(x = Datetime_UTC, y = dfCO2_uatm.y)) +
+  geom_line() +
+  geom_point() +
+  geom_point(data = underway, aes(x = Datetime_UTC, y = dfCO2_uatm.x), color = "green") +
+  theme_minimal()
+
+# Value used to transform the data
+coeff <- 0.18
+ggplot(underway, aes(x = Datetime_UTC)) +
+    geom_point( aes(y = dfCO2_uatm.y), size=2, color= "black") + 
+    geom_line( aes(y=TempC_SBE38_hull / coeff), linewidth=1, color="red") +
+    scale_y_continuous(
+    # Features of the first axis
+    name = "dfCO2_uatm",
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~.*coeff, name="TempC_SBE38_hull")
+  ) 
+
+coeff <- 0.1666666
+ggplot(underway, aes(x = Datetime_UTC)) +
+    geom_point( aes(y = dfCO2_uatm.y), size=2, color= "black") + 
+    geom_line( aes(y=Salinity_PSU_SBE45 / coeff-30), linewidth=1, color= "blue") +
+    scale_y_continuous(
+    # Features of the first axis
+    name = "dfCO2_uatm",
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~.*coeff, name="Salinity_PSU_SBE45")
+  ) 
+
+# check for differences between 2-sec underway data and pco2 ancillary data
+underway$SAL_permil <- round(underway$SAL_permil, 3)
+underway$sal_diff <- underway$SAL_permil - underway$Salinity_PSU_SBE45
+
+hist(underway$sal_diff)
+ggplot(underway, aes(x = Datetime_UTC, y = sal_diff)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+
+underway$SST_C <- round(underway$SST_C, 3)
+underway$temp_diff <- underway$SST_C - underway$TempC_SBE38_hull
+
+hist(underway$temp_diff)
+ggplot(underway, aes(x = Datetime_UTC, y = temp_diff)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+
+underway$LAT_dec_degree <- round(underway$LAT_dec_degree, 4)
+underway$lat_diff <- underway$LAT_dec_degree - underway$Latitude
+
+hist(underway$lat_diff)
+ggplot(underway, aes(x = Datetime_UTC, y = lat_diff)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+
+underway$LONG_dec_degree <- round(underway$LONG_dec_degree, 4)
+underway$lon_diff <- underway$LONG_dec_degree - underway$Longitude
+
+hist(underway$lon_diff)
+ggplot(underway, aes(x = Datetime_UTC, y = lon_diff)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+
+```
+# remove unneeded columns, rename and reorder needed columns
+
+```{r}
+
+underway$Depth <- as.numeric(1.52)
+
+underway <- underway |>
+  select(-dfCO2_uatm.x, -Datetime_char, -SST_C, -SAL_permil, -two_sec, -sal_diff, -temp_diff, -lat_diff, -lon_diff, -LAT_dec_degree, -LONG_dec_degree) |>
+  rename(dfCO2_uatm = dfCO2_uatm.y) |>
+  rename(CO2_flag = WOCE_QC_FLAG) |>
+  rename(CO2_subflag = QC_SUBFLAG) |>
+  relocate(Rhodamine_ugkg, .after = Salinity_flag) |>
+  relocate(Rhodamine_flag, .after = Rhodamine_ugkg) |>
+  relocate(Depth, .after = Longitude) |>
+  rename(Temperature_lab_ITS90 = TempC_SBE45_lab) |>
+  rename(Temperature_lab_flag = TempC_SBE45_flag) |>
+  rename(Temperature_hull_ITS90 = TempC_SBE38_hull) |>
+  rename(Temperature_hull_flag = TempC_SBE38_flag) |>
+  rename(Pressure_ATM_hPa = PRES_ATM.SSP_hPa) |>
+  rename(Pressure_EQU_hPa = PRES_EQU_hPa) |>
+  rename(Temperature_EQU_ITS90 = TEMP_EQU_C) |>
+  rename(fCO2_SW_SST = fCO2_SW.SST_uatm) |>
+  rename(Salinity_PSS78 = Salinity_PSU_SBE45)
+
+# headers <- names(underway)
+# # headers <- cat(bott_cols,"\n",sep=", ")
+# headers <- str_replace(headers, "_ppm", "")
+# headers <- str_replace(headers, "_hPa", "")
+# headers <- str_replace(headers, "_umol_kg", "")
+# headers <- str_replace(headers, "_ugkg", "")
+# headers <- str_replace(headers, "_uatm", "")
+# headers <- cat(headers,"\n",sep="', '")
+# # copy and paste console output below
+
+colnames(underway) <- c('EXPOCODE', 'Cruise_ID', 'Datetime_UTC', 'Latitude', 'Longitude', 'Depth', 'Temperature_lab_ITS90', 'Temperature_lab_flag', 'Temperature_hull_ITS90', 'Temperature_hull_flag', 'Salinity_PSS78', 'Salinity_flag', 'Rhodamine', 'Rhodamine_flag', 'TA', 'TA_flag', 'xCO2_EQU', 'xCO2_ATM', 'xCO2_ATM_interpolated', 'Pressure_EQU', 'Pressure_ATM', 'Temperature_EQU_ITS90', 'fCO2_SW_SST', 'fCO2_ATM_interpolated', 'dfCO2', 'CO2_flag', 'CO2_subflag')
+
+header <- names(underway)
+unit <- c("NA", "NA", "[yyyy-mm-dd hh:mm:ss]", "decimalDegree", "decimalDegree", "meter", "degreeCelsius", "NA", "degreeCelsius", "NA", "PSS78", "NA", "microgramPerGram", "NA", "micromolePerMole", "NA", "microatmosphere", "microatmosphere", "microatmosphere", "hectopascal", "hectopascal", "degreeCelsius", "microatmosphere", "microatmosphere","microatmosphere", "NA", "NA")
+
+meta <- cbind(header, unit)
+
+write.csv(underway, here('output','LOC-01_underway.csv'), row.names=FALSE)
+write.csv(meta, here('output','LOC-01_underway_headers.csv'), row.names=FALSE)
+
+# socat headers: (EXPOCODE, Cruise_ID, datetime_UTC, Latitude, Longitude, Depth, SST_ITS90, SSS_PSS78, Pressure_ATM, Temperature_EQU_ITS90, Pressure_EQU, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated, fCO2_SW_SST, fCO2_SW_flag, fCO2_ATM_interpolated, dfCO2, TA, TA_flag, rhodamine, rhodamime_flag)
+
+# socat units: (NA, NA, [yyyy-mm-dd hh:mm:ss], decimal degree, decimal degree, meter, degree Celsius, NA, hPa, degree Celsius, hPa, micromol/mol, micromol/mol, micromol/mol, microatm, NA, microatm, microatm, micromol/kg, NA, microg/kg, NA)
+
+writeLines(c("# Expocode: 33LQ20230901", "# Vessel name: Connecticut", "# PIs: Subhas, A. V.", "# Org: Woods Hole Oceanographic Institution", "# Vessel type: Ship", "# Suggested QC: B", "EXPOCODE, Cruise_ID, Datetime_UTC, Latitude, Longitude, Depth, Temperature_lab_ITS90, Temperature_lab_flag, Temperature_hull_ITS90, Temperature_hull_flag, Salinity_PSS78, Salinity_flag, Rhodamine, Rhodamine_flag, TA, TA_flag, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated, Pressure_EQU, Pressure_ATM, Temperature_EQU_ITS90, fCO2_SW_SST, fCO2_ATM_interpolated, dfCO2, CO2_flag, CO2_subflag","NA, NA, [yyyy-mm-dd hh:mm:ss], decimalDegree, decimalDegree, meter, degreeCelsius, NA, degreeCelsius, NA, PSS78, NA, microgramPerGram, NA, micromolePerMole, NA, microatmosphere, microatmosphere, microatmosphere, hectopascal, hectopascal, degreeCelsius, microatmosphere, microatmosphere microatmosphere, NA, NA"), here('output','LOC-01_underway_with_meta.txt'))
+write.table(underway, here('output','LOC-01_underway_with_meta.txt'), col.names = FALSE, row.names=FALSE, append=TRUE, sep = ", ")
 
 ```
 ## Drifters
