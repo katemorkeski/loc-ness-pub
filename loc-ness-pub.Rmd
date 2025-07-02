@@ -161,12 +161,12 @@ bottle_stns <- bottle_stns |>
   rename(cast_btl = cast) |>
   rename(latitude_btl = latitude) |>
   rename(longitude_btl = "...5") 
-  
+
 # set up to construct lookup table
 bottle_stns <- ungroup(bottle_stns)
 bottle_stns <- bottle_stns |>   
   add_row(event = c(26, 27, 28, 29,33,36,37))
-  
+
 # check coordinates of stations
 profile_stns_lat <- ctd_prof |>
   group_by(station, cast, patch) |>
@@ -210,9 +210,9 @@ ctd_bott_recal <- ctd_bott_recal |>
 
 # calculate density
 ctd_bott_recal$density <- (999.842594 + 0.06793952*ctd_bott_recal$t090c - 0.00909529*ctd_bott_recal$t090c^2 + 0.0001001685*ctd_bott_recal$t090c^3 -0.000001120083*ctd_bott_recal$t090c^4 +
-0.000000006536332*ctd_bott_recal$t090c^5 + (0.824493-0.0040899*ctd_bott_recal$t090c + 0.000076438*ctd_bott_recal$t090c^2 - 0.00000082467*ctd_bott_recal$t090c^3 +
-0.0000000053875*ctd_bott_recal$t090c^4)*ctd_bott_recal$sal00 + (-0.00572466 + 0.00010227*ctd_bott_recal$t090c - 0.0000016546*ctd_bott_recal$t090c^2)*ctd_bott_recal$sal00^1.5 +
-0.00048314*ctd_bott_recal$sal00^2)/1000
+                             0.000000006536332*ctd_bott_recal$t090c^5 + (0.824493-0.0040899*ctd_bott_recal$t090c + 0.000076438*ctd_bott_recal$t090c^2 - 0.00000082467*ctd_bott_recal$t090c^3 +
+                                                                           0.0000000053875*ctd_bott_recal$t090c^4)*ctd_bott_recal$sal00 + (-0.00572466 + 0.00010227*ctd_bott_recal$t090c - 0.0000016546*ctd_bott_recal$t090c^2)*ctd_bott_recal$sal00^1.5 +
+                             0.00048314*ctd_bott_recal$sal00^2)/1000
 
 # convert per-liter quantities to per kg
 #oxygen
@@ -289,7 +289,7 @@ ctd_bott_recal <- ctd_bott_recal |>
   rename(Delta_C13_DIC = d13c) |>
   rename(Delta_C13_POC = d13poc) |>
   rename(Delta_N15_TPN = d15n_air) |>
-  rename(Atom_Percent_15N_TPN = x15n_at) |>
+  select(-x15n_at) |>
   rename(Particulate_Inorganic_Carbon = PIC_umol_kg) |>
   rename(Particulate_Organic_Carbon =POC_umol_kg) |>
   rename(Total_Particulate_Nitrogen = TPN_umol_kg) |>
@@ -327,24 +327,24 @@ ctd_bott_recal$POC_flag <- as.numeric(NA)
 ctd_bott_recal$TPN_flag <- as.numeric(NA)
 ctd_bott_recal$Delta_C13_DIC_flag <- as.numeric(NA)
 ctd_bott_recal$Delta_C13_POC_flag <- as.numeric(NA)
-ctd_bott_recal$Atom_Percent_15N_TPN_flag<- as.numeric(NA)
+#ctd_bott_recal$Atom_Percent_15N_TPN_flag<- as.numeric(NA)
 ctd_bott_recal$Delta_N15_TPN_flag <- as.numeric(NA)
 
 # set flag values
 ctd_bott_recal <- ctd_bott_recal |>
-mutate(DIC_flag= case_when(DIC != "NA" ~ 2, is.na(DIC) ~9)) |>
-mutate(TA_flag= case_when(TA != "NA" ~ 2, is.na(TA) ~9)) |>
-mutate(Silicate_flag= case_when(Silicate != "NA" ~ 2, is.na(Silicate) ~9)) |>
-mutate(Phosphate_flag= case_when(Phosphate != "NA" ~ 2, is.na(Phosphate) ~9)) |>
-mutate(Nitrate_and_Nitrite_flag= case_when(Nitrate_and_Nitrite != "NA" ~ 2, is.na(Nitrate_and_Nitrite) ~9)) |>
-mutate(Ammonium_flag= case_when(Ammonium != "NA" ~ 2, is.na(Ammonium) ~9)) |>
-mutate(PIC_flag = case_when(Particulate_Inorganic_Carbon != "NA" ~ 2, is.na(Particulate_Inorganic_Carbon) ~9)) |>
-mutate(POC_flag = case_when(Particulate_Organic_Carbon != "NA" ~ 2, is.na(Particulate_Organic_Carbon) ~9)) |>
-mutate(TPN_flag = case_when(Total_Particulate_Nitrogen != "NA" ~ 2, is.na(Total_Particulate_Nitrogen) ~9)) |>
-mutate(Delta_C13_DIC_flag = case_when(Delta_C13_DIC != "NA" ~ 2, is.na(Delta_C13_DIC) ~9)) |>
-mutate(Delta_C13_POC_flag = case_when(Delta_C13_POC != "NA" ~ 2, is.na(Delta_C13_POC) ~9)) |>
-mutate(Atom_Percent_15N_TPN_flag = case_when(Atom_Percent_15N_TPN != "NA" ~ 2, is.na(Atom_Percent_15N_TPN) ~9)) |>
-mutate(Delta_N15_TPN_flag = case_when(Delta_N15_TPN != "NA" ~ 2, is.na(Delta_N15_TPN) ~9))
+  mutate(DIC_flag= case_when(DIC != "NA" ~ 2, is.na(DIC) ~9)) |>
+  mutate(TA_flag= case_when(TA != "NA" ~ 2, is.na(TA) ~9)) |>
+  mutate(Silicate_flag= case_when(Silicate != "NA" ~ 2, is.na(Silicate) ~9)) |>
+  mutate(Phosphate_flag= case_when(Phosphate != "NA" ~ 2, is.na(Phosphate) ~9)) |>
+  mutate(Nitrate_and_Nitrite_flag= case_when(Nitrate_and_Nitrite != "NA" ~ 2, is.na(Nitrate_and_Nitrite) ~9)) |>
+  mutate(Ammonium_flag= case_when(Ammonium != "NA" ~ 2, is.na(Ammonium) ~9)) |>
+  mutate(PIC_flag = case_when(Particulate_Inorganic_Carbon != "NA" ~ 2, is.na(Particulate_Inorganic_Carbon) ~9)) |>
+  mutate(POC_flag = case_when(Particulate_Organic_Carbon != "NA" ~ 2, is.na(Particulate_Organic_Carbon) ~9)) |>
+  mutate(TPN_flag = case_when(Total_Particulate_Nitrogen != "NA" ~ 2, is.na(Total_Particulate_Nitrogen) ~9)) |>
+  mutate(Delta_C13_DIC_flag = case_when(Delta_C13_DIC != "NA" ~ 2, is.na(Delta_C13_DIC) ~9)) |>
+  mutate(Delta_C13_POC_flag = case_when(Delta_C13_POC != "NA" ~ 2, is.na(Delta_C13_POC) ~9)) |>
+  #mutate(Atom_Percent_15N_TPN_flag = case_when(Atom_Percent_15N_TPN != "NA" ~ 2, is.na(Atom_Percent_15N_TPN) ~9)) |>
+  mutate(Delta_N15_TPN_flag = case_when(Delta_N15_TPN != "NA" ~ 2, is.na(Delta_N15_TPN) ~9))
 
 # print column names to facilitate re-ordering
 # # very ugly way of getting and editing headers to re-order
@@ -361,14 +361,14 @@ mutate(Delta_N15_TPN_flag = case_when(Delta_N15_TPN != "NA" ~ 2, is.na(Delta_N15
 # headers2 <- c(headers2)
 # print(headers2) # copy and paste below
 
-headers3 <- c('EXPOCODE', 'Cruise_ID', 'Station_ID', 'Patch', 'Cast_number', 'Event_number', 'Rosette_position', 'Niskin_flag', 'Sample_ID', 'Datetime_UTC', 'Latitude', 'Longitude', 'CTDPRES', 'CTDTEMP_ITS90', 'CTDTEMP_flag', 'Depth', 'CTDSAL_PSS78', 'CTDSAL_flag', 'CTDOXY', 'CTDOXY_flag', 'pH_NBS_measured_electrode', 'pH_flag', 'Chl_a_sensor', 'Chl_a_flag', 'Rhodamine', 'Rhodamine_flag', 'DIC', 'DIC_flag', 'TA', 'TA_flag', 'Silicate', 'Silicate_flag', 'Phosphate', 'Phosphate_flag', 'Nitrate_and_Nitrite', 'Nitrate_and_Nitrite_flag', 'Ammonium', 'Ammonium_flag', 'Particulate_Inorganic_Carbon', 'PIC_flag', 'Particulate_Organic_Carbon', 'POC_flag', 'Total_Particulate_Nitrogen', 'TPN_flag', 'Delta_C13_DIC', 'Delta_C13_DIC_flag', 'Delta_C13_POC', 'Delta_C13_POC_flag', 'Atom_Percent_15N_TPN', 'Atom_Percent_15N_TPN_flag', 'Delta_N15_TPN', 'Delta_N15_TPN_flag')
+headers3 <- c('EXPOCODE', 'Cruise_ID', 'Station_ID', 'Patch', 'Cast_number', 'Event_number', 'Rosette_position', 'Niskin_flag', 'Sample_ID', 'Datetime_UTC', 'Latitude', 'Longitude', 'CTDPRES', 'CTDTEMP_ITS90', 'CTDTEMP_flag', 'Depth', 'CTDSAL_PSS78', 'CTDSAL_flag', 'CTDOXY', 'CTDOXY_flag', 'pH_NBS_measured_electrode', 'pH_flag', 'Chl_a_sensor', 'Chl_a_flag', 'Rhodamine', 'Rhodamine_flag', 'DIC', 'DIC_flag', 'TA', 'TA_flag', 'Silicate', 'Silicate_flag', 'Phosphate', 'Phosphate_flag', 'Nitrate_and_Nitrite', 'Nitrate_and_Nitrite_flag', 'Ammonium', 'Ammonium_flag', 'Particulate_Inorganic_Carbon', 'PIC_flag', 'Particulate_Organic_Carbon', 'POC_flag', 'Total_Particulate_Nitrogen', 'TPN_flag', 'Delta_C13_DIC', 'Delta_C13_DIC_flag', 'Delta_C13_POC', 'Delta_C13_POC_flag', 'Delta_N15_TPN', 'Delta_N15_TPN_flag')
 
 ctd_bott_recal <- ctd_bott_recal[, headers3]
 
-unit <- c("NA", "NA", "NA", "NA", "NA", "NA","NA", "NA","NA","[yyyy-mm-dd hh:mm:ss]", "decimalDegree", "decimalDegree", "decibar", "degreeCelsius", "NA", "meter", "PSS78", "NA", "micromolePerKilogram", "NA","NA","NA", "microgramPerKilogram", "NA", "microgramPerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "perMil", "NA", "perMil", "NA", "atomPercent", "NA", "perMil", "NA")
+unit <- c("NA", "NA", "NA", "NA", "NA", "NA","NA", "NA","NA","[yyyy-mm-dd hh:mm:ss]", "decimalDegree", "decimalDegree", "decibar", "degreeCelsius", "NA", "meter", "PSS78", "NA", "micromolePerKilogram", "NA","NA","NA", "microgramPerKilogram", "NA", "microgramPerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "micromolePerKilogram", "NA", "perMil", "NA", "perMil", "NA", "perMil", "NA")
 meta <- cbind(headers3, unit)
 write.csv(meta, here('output','LOC-01_CTD_bottle_headers.csv'), row.names=FALSE)
-  
+
 ```
 
 
@@ -389,9 +389,9 @@ ctd_prof <- ctd_prof |>
 # convert oxygen units
 # calculate density
 ctd_prof$density <- (999.842594 + 0.06793952*ctd_prof$t090c_its_90_deg_c - 0.00909529*ctd_prof$t090c_its_90_deg_c^2 + 0.0001001685*ctd_prof$t090c_its_90_deg_c^3 -0.000001120083*ctd_prof$t090c_its_90_deg_c^4 +
-0.000000006536332*ctd_prof$t090c_its_90_deg_c^5 + (0.824493-0.0040899*ctd_prof$t090c_its_90_deg_c + 0.000076438*ctd_prof$t090c_its_90_deg_c^2 - 0.00000082467*ctd_prof$t090c_its_90_deg_c^3 +
-0.0000000053875*ctd_prof$t090c_its_90_deg_c^4)*ctd_prof$sal00_psu + (-0.00572466 + 0.00010227*ctd_prof$t090c_its_90_deg_c - 0.0000016546*ctd_prof$t090c_its_90_deg_c^2)*ctd_prof$sal00_psu^1.5 +
-0.00048314*ctd_prof$sal00_psu^2)/1000
+                       0.000000006536332*ctd_prof$t090c_its_90_deg_c^5 + (0.824493-0.0040899*ctd_prof$t090c_its_90_deg_c + 0.000076438*ctd_prof$t090c_its_90_deg_c^2 - 0.00000082467*ctd_prof$t090c_its_90_deg_c^3 +
+                                                                            0.0000000053875*ctd_prof$t090c_its_90_deg_c^4)*ctd_prof$sal00_psu + (-0.00572466 + 0.00010227*ctd_prof$t090c_its_90_deg_c - 0.0000016546*ctd_prof$t090c_its_90_deg_c^2)*ctd_prof$sal00_psu^1.5 +
+                       0.00048314*ctd_prof$sal00_psu^2)/1000
 
 # convert per-liter quantities to per kg
 #oxygen
@@ -425,7 +425,7 @@ ctd_prof <- ctd_prof |>
   relocate(Chl_a_sensor, .after = pH_NBS_measured_electrode) |>
   rename(Rhodamine = rhodamine_ugkg) |>
   relocate(Rhodamine, .after = Chl_a_sensor) 
- 
+
 #check sensor flag
 unique(ctd_prof$sensor_flag)
 
@@ -596,7 +596,7 @@ underway_co2 <- read.csv('LOC-01_Final_CO2.csv', skip = 4)
 # one point was flagged 3 for low water flow. remove this row since underway pump was off
 underway_co2 <- filter(underway_co2, YD_UTC < 247.375)
 underway_co2 <- replace_with_na_all(data = underway_co2,
-                    condition = ~.x == -999)
+                                    condition = ~.x == -999)
 
 ggplot(underway_co2, aes(x = YD_UTC, y = dfCO2_uatm)) +
   geom_line() +
@@ -611,7 +611,7 @@ ggplot(underway_co2, aes(x = YD_UTC, y = dfCO2_uatm)) +
 # merge underway_rho and underway_co2 to include all CO2 points
 # keep columns we left out that SOCAT wants: Pressure_ATM, Pressure_EQU, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated 
 # format column headers for match SOCAT
- 
+
 # underway_co2$datetime <- paste(underway_co2$datetime, underway_co2$time)
 #underway_co2$datetime <-paste(underway_co2$DATE_UTC__ddmmyyyy, underway_co2$TIME_UTC_hh.mm.ss)
 underway_co2$DATE_UTC__ddmmyyyy <- str_pad(underway_co2$DATE_UTC__ddmmyyyy, 8, pad = "0")
@@ -652,9 +652,9 @@ ggplot(underway, aes(x = Datetime_UTC, y = dfCO2_uatm.y)) +
 # Value used to transform the data
 coeff <- 0.18
 ggplot(underway, aes(x = Datetime_UTC)) +
-    geom_point( aes(y = dfCO2_uatm.y), size=2, color= "black") + 
-    geom_line( aes(y=TempC_SBE38_hull / coeff), linewidth=1, color="red") +
-    scale_y_continuous(
+  geom_point( aes(y = dfCO2_uatm.y), size=2, color= "black") + 
+  geom_line( aes(y=TempC_SBE38_hull / coeff), linewidth=1, color="red") +
+  scale_y_continuous(
     # Features of the first axis
     name = "dfCO2_uatm",
     # Add a second axis and specify its features
@@ -663,9 +663,9 @@ ggplot(underway, aes(x = Datetime_UTC)) +
 
 coeff <- 0.1666666
 ggplot(underway, aes(x = Datetime_UTC)) +
-    geom_point( aes(y = dfCO2_uatm.y), size=2, color= "black") + 
-    geom_line( aes(y=Salinity_PSU_SBE45 / coeff-30), linewidth=1, color= "blue") +
-    scale_y_continuous(
+  geom_point( aes(y = dfCO2_uatm.y), size=2, color= "black") + 
+  geom_line( aes(y=Salinity_PSU_SBE45 / coeff-30), linewidth=1, color= "blue") +
+  scale_y_continuous(
     # Features of the first axis
     name = "dfCO2_uatm",
     # Add a second axis and specify its features
@@ -758,7 +758,10 @@ write.csv(meta, here('output','LOC-01_underway_headers.csv'), row.names=FALSE)
 
 # socat units: (NA, NA, [yyyy-mm-dd hh:mm:ss], decimal degree, decimal degree, meter, degree Celsius, NA, hPa, degree Celsius, hPa, micromol/mol, micromol/mol, micromol/mol, microatm, NA, microatm, microatm, micromol/kg, NA, microg/kg, NA)
 
-writeLines(c("# Expocode: 33LQ20230901", "# Vessel name: Connecticut", "# PIs: Subhas, A. V.", "# Org: Woods Hole Oceanographic Institution", "# Vessel type: Ship", "# Suggested QC: B", "EXPOCODE, Cruise_ID, Datetime_UTC, Latitude, Longitude, Depth, Temperature_lab_ITS90, Temperature_lab_flag, Temperature_hull_ITS90, Temperature_hull_flag, Salinity_PSS78, Salinity_flag, Rhodamine, Rhodamine_flag, TA, TA_flag, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated, Pressure_EQU, Pressure_ATM, Temperature_EQU_ITS90, fCO2_SW_SST, fCO2_ATM_interpolated, dfCO2, CO2_flag, CO2_subflag","NA, NA, [yyyy-mm-dd hh:mm:ss], decimalDegree, decimalDegree, meter, degreeCelsius, NA, degreeCelsius, NA, PSS78, NA, microgramPerKilogram, NA, micromolePerKilogram, NA, microatmosphere, microatmosphere, microatmosphere, hectopascal, hectopascal, degreeCelsius, microatmosphere, microatmosphere, microatmosphere, NA, NA"), here('output','LOC-01_underway_with_meta.txt'))
+# paper authors: Adam V. Subhas, Jennie E. Rheuban, Zhaohui Aleck Wang, Daniel C. McCorkle, Anna P. M. Michel, Lukas Marx, Chloe L. Dean, Kate Morkeski, Matthew G. Hayden, Mary Burkitt-Gray, Francis Elder, Yiming Guo, Heather H. Kim, Ke Chen
+# authors last first, initials: Subhas, A. V, Rheuban, J. E., Wang, Z. A., McCorkle, D. C., Michel, A. P. M., Marx, L., Dean, C. L., Morkeski, K., Hayden, M. G., Burkitt-Gray, M., Elder, F., Guo, Y., Kim, H. H., Chen, K.
+
+writeLines(c("# Expocode: 33LQ20230901", "# Vessel name: Connecticut", "# PIs: A. V. Subhas; J. E. Rheuban; Z. A. Wang; D. C. McCorkle; A. P. M. Michel; L. Marx; C. L. Dean; K. Morkeski; M. G. Hayden; M. Burkitt-Gray; F. Elder; Y. Guo; H. H. Kim; K. Chen", "# Org: Woods Hole Oceanographic Institution", "# Vessel type: Ship", "# Suggested QC: B", "EXPOCODE, Cruise_ID, Datetime_UTC, Latitude, Longitude, Depth, Temperature_lab_ITS90, Temperature_lab_flag, Temperature_hull_ITS90, Temperature_hull_flag, Salinity_PSS78, Salinity_flag, Rhodamine, Rhodamine_flag, TA, TA_flag, xCO2_EQU, xCO2_ATM, xCO2_ATM_interpolated, Pressure_EQU, Pressure_ATM, Temperature_EQU_ITS90, fCO2_SW_SST, fCO2_ATM_interpolated, dfCO2, CO2_flag, CO2_subflag","NA, NA, [yyyy-mm-dd hh:mm:ss], decimalDegree, decimalDegree, meter, degreeCelsius, NA, degreeCelsius, NA, PSS78, NA, microgramPerKilogram, NA, micromolePerKilogram, NA, microatmosphere, microatmosphere, microatmosphere, hectopascal, hectopascal, degreeCelsius, microatmosphere, microatmosphere, microatmosphere, NA, NA"), here('output','LOC-01_underway_with_meta.txt'))
 write.table(underway, here('output','LOC-01_underway_with_meta.txt'), col.names = FALSE, row.names=FALSE, append=TRUE, sep = ", ")
 
 ```
@@ -936,7 +939,7 @@ drifter3 <- drifter3 |>
   relocate(Depth.m, .after = Datetime_UTC_sensor) |>
   relocate(Temperature.C, .after = Depth.m) |>
   select(-temp_C) # remove fluorometer temperature because insulated; keep sonde temperature
-  
+
 # Apply OCADS-style column names # oxygen not ready yet
 drifter3 <- drifter3 |>
   rename(Depth = Depth.m) |>
@@ -944,15 +947,15 @@ drifter3 <- drifter3 |>
   rename(Salinity_PSS78 = Salinity.PSU) |>
   rename(pH_NBS_measured_electrode = pH) |>
   rename(Rhodamine = recal_ppb)
- 
+
 # EMLassemblyline::view_unit_dictionary()
 
 # convert oxygen units
 # calculate density
 drifter3$density <- (999.842594 + 0.06793952*drifter3$Temperature_ITS90 - 0.00909529*drifter3$Temperature_ITS90^2 + 0.0001001685*drifter3$Temperature_ITS90^3 -0.000001120083*drifter3$Temperature_ITS90^4 +
-0.000000006536332*drifter3$Temperature_ITS90^5 + (0.824493-0.0040899*drifter3$Temperature_ITS90 + 0.000076438*drifter3$Temperature_ITS90^2 - 0.00000082467*drifter3$Temperature_ITS90^3 +
-0.0000000053875*drifter3$Temperature_ITS90^4)*drifter3$Salinity_PSS78 + (-0.00572466 + 0.00010227*drifter3$Temperature_ITS90 - 0.0000016546*drifter3$Temperature_ITS90^2)*drifter3$Salinity_PSS78^1.5 +
-0.00048314*drifter3$Salinity_PSS78^2)/1000
+                       0.000000006536332*drifter3$Temperature_ITS90^5 + (0.824493-0.0040899*drifter3$Temperature_ITS90 + 0.000076438*drifter3$Temperature_ITS90^2 - 0.00000082467*drifter3$Temperature_ITS90^3 +
+                                                                           0.0000000053875*drifter3$Temperature_ITS90^4)*drifter3$Salinity_PSS78 + (-0.00572466 + 0.00010227*drifter3$Temperature_ITS90 - 0.0000016546*drifter3$Temperature_ITS90^2)*drifter3$Salinity_PSS78^1.5 +
+                       0.00048314*drifter3$Salinity_PSS78^2)/1000
 
 # convert per-liter quantities to per kg
 #oxygen
@@ -965,7 +968,7 @@ drifter3$Oxygen <- round(drifter3$Oxygen_umol_kg, 2) #round
 drifter3 <- drifter3 |>
   mutate(Latitude = round(Latitude, 4)) |>
   mutate(Longitude = round(Longitude, 4)) |>
-  mutate(Depth = round(Depth, 3)) |>
+  mutate(Depth = round(Depth, 1)) |>
   mutate(Temperature_ITS90 = round(Temperature_ITS90, 3)) |>
   mutate(pH_NBS_measured_electrode = round(pH_NBS_measured_electrode, 4)) |>
   mutate(Salinity_PSS78 = round( Salinity_PSS78, 3)) |>
@@ -1023,7 +1026,7 @@ unique(drifter4$Deployment)
 # fill in deployment number (initially only on GPS rows)
 drifter4 <- drifter4 |>
   mutate(Deployment = case_when(time_seconds < 1693698600 ~ 1, TRUE ~ 2)) 
- 
+
 drifter4 <- drifter4 |>
   select(-X, -Time, -Bat.Volts, -T.degC, -Sensor.Ppb, -Gain, -Time.1, -TotalDissolvedSolids.ppt, -Turbidity.NTU, -datetime_UTC_fluorometer, -time_seconds, -battery_voltage_V, -ppb, -gain, -datetime, -datetime_EST, -calculated_voltage, -datetime_UTC_RWT_rounded)
 
@@ -1080,7 +1083,7 @@ drifter4 <- drifter4 |>
   relocate(Depth.m, .after = Datetime_UTC_sensor) |>
   relocate(Temperature.C, .after = Depth.m) |>
   select(-temp_C) # remove fluorometer temperature because insulated; keep sonde temperature
-  
+
 # Apply OCADS-style column names # oxygen not ready yet
 drifter4 <- drifter4 |>
   rename(Depth = Depth.m) |>
@@ -1088,15 +1091,15 @@ drifter4 <- drifter4 |>
   rename(Salinity_PSS78 = Salinity.PSU) |>
   rename(pH_NBS_measured_electrode = pH.pH) |>
   rename(Rhodamine = recal_ppb)
- 
+
 # EMLassemblyline::view_unit_dictionary()
 
 # convert oxygen units
 # calculate density
 drifter4$density <- (999.842594 + 0.06793952*drifter4$Temperature_ITS90 - 0.00909529*drifter4$Temperature_ITS90^2 + 0.0001001685*drifter4$Temperature_ITS90^3 -0.000001120083*drifter4$Temperature_ITS90^4 +
-0.000000006536332*drifter4$Temperature_ITS90^5 + (0.824493-0.0040899*drifter4$Temperature_ITS90 + 0.000076438*drifter4$Temperature_ITS90^2 - 0.00000082467*drifter4$Temperature_ITS90^3 +
-0.0000000053875*drifter4$Temperature_ITS90^4)*drifter4$Salinity_PSS78 + (-0.00572466 + 0.00010227*drifter4$Temperature_ITS90 - 0.0000016546*drifter4$Temperature_ITS90^2)*drifter4$Salinity_PSS78^1.5 +
-0.00048314*drifter4$Salinity_PSS78^2)/1000
+                       0.000000006536332*drifter4$Temperature_ITS90^5 + (0.824493-0.0040899*drifter4$Temperature_ITS90 + 0.000076438*drifter4$Temperature_ITS90^2 - 0.00000082467*drifter4$Temperature_ITS90^3 +
+                                                                           0.0000000053875*drifter4$Temperature_ITS90^4)*drifter4$Salinity_PSS78 + (-0.00572466 + 0.00010227*drifter4$Temperature_ITS90 - 0.0000016546*drifter4$Temperature_ITS90^2)*drifter4$Salinity_PSS78^1.5 +
+                       0.00048314*drifter4$Salinity_PSS78^2)/1000
 
 # convert per-liter quantities to per kg
 #oxygen
@@ -1109,7 +1112,7 @@ drifter4$Oxygen <- round(drifter4$Oxygen_umol_kg, 2) #round
 drifter4 <- drifter4 |>
   mutate(Latitude = round(Latitude, 4)) |>
   mutate(Longitude = round(Longitude, 4)) |>
-  mutate(Depth = round(Depth, 3)) |>
+  mutate(Depth = round(Depth, 1)) |>
   mutate(Temperature_ITS90 = round(Temperature_ITS90, 3)) |>
   mutate(pH_NBS_measured_electrode = round(pH_NBS_measured_electrode, 4)) |>
   mutate(Salinity_PSS78 = round( Salinity_PSS78, 3)) |>
@@ -1144,6 +1147,36 @@ ggplot(drifter4, aes(x = Datetime_UTC_sensor, y = Oxygen)) +
 ggsave('drifter4_oxygen_umol_kg.png')
 
 write.csv(drifter4, here('output','LOC-01_drifter_04.csv'), row.names=FALSE)
+
+```
+# read csv files and output with header lines and units
+
+```{r}
+
+# did this manually
+
+```
+
+# Get temporal and spatial coverage
+
+```{r}
+
+# temporal
+startdate <- as.Date(min(underway$Datetime_UTC, na.rm = TRUE))
+print(paste("Start date is", startdate))
+enddate <- as.Date(max(underway$Datetime_UTC, na.rm = TRUE))
+print(paste("End date is", enddate))
+
+# Geographic coverage
+North <- max(underway$Latitude, na.rm = TRUE)
+East <- max(underway$Longitude, na.rm = TRUE)
+South <- min(underway$Latitude, na.rm = TRUE)
+West <- min(underway$Longitude, na.rm = TRUE)
+
+print(paste("North Latitude extent is", North))
+print(paste("West Latitude extent is", West))
+print(paste("East Latitude extent is", East))
+print(paste("South Latitude extent is", South))
 
 ```
 
